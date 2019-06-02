@@ -63,6 +63,66 @@ uint32_t endianSwap(File file, uint8_t numBytes) {
 	return out;
 }
 
+class GenericBitmap {
+	
+	public:
+		String fileName = "/";
+		File file;
+		int8_t extension = 0;
+		uint8_t paddingSize = 0;
+		uint32_t sizeOfFile = 0;
+		uint32_t startOfPixels = 0;
+		uint32_t sizeOfDIB = 0;
+		uint32_t width = 0;
+		uint32_t height = 0;
+		uint32_t colorDepth = 0;
+		uint32_t rawImageSize = 0;
+
+		File openFile(String fileName) {
+			File file = SD.open(fileName);
+			if (!file) {
+				printf("File could not be opened");
+				return 0;
+			}
+			else {
+				return file;
+			}
+		}
+
+		void grabInfo(File file) {
+			//4 byte temp data buffer
+			uint8_t* tempData[4];
+			//Ensure we're at the top of the file
+			file.seek(0x0000);
+			//Check that this file is of an allowed type (currently only bmp)
+			if ((file.read() == 0x42) && (file.read() == 0x4D)) {	//File is bmp with file type 0x4D42
+				//File size
+				sizeOfFile = endianSwap(file, 4);
+				//Starting pixel location
+				file.seek(0xA);
+				startOfPixels = endianSwap(file, 4);
+				//Size of DIB header
+				sizeOfDIB = endianSwap(file, 4); //Will breakout here to account for all sizes of BMP DIBs
+
+				//Dimensions
+				width = endianSwap(file, 4);
+				height = endianSwap(file, 4);
+				//Color Depth
+				file.seek(file.position() + 0x2);
+				colorDepth = endianSwap(file, 2);
+				//Raw image size with padding
+				file.seek(file.position() + 0x2);
+				rawImageSize = endianSwap(file, 4);
+
+				//Skip to pixel data
+				file.seek(startOfPixels);
+				paddingSize = ((width * 3) % 4);
+				//Check how many LEDS 
+				extension = (0 - (0 - (NUM_LEDS / width)));
+			}
+		}
+};
+
 void setup(){
     //LED setup
     FastLED.addLeds<WS2811, DATA_PIN, GRB>(leds, NUM_LEDS);
@@ -82,29 +142,24 @@ void setup(){
 }
 
 void loop() {
-	//Vars that only change when a new image is loaded
+	//Vars that need initializing each cycle
+	GenericBitmap curBitmap;
 	bool contPlayingFile = true;
 	bool firstCycle = true;
-	int8_t extension = 0;
-	uint8_t paddingSize = 0;
-	uint32_t sizeOfFile = 0;
-	uint32_t startOfPixels = 0;
-	uint32_t sizeOfDIB = 0;
-	uint32_t width = 0;
-	uint32_t height = 0;
-	uint32_t colorDepth = 0;
-	uint32_t rawImageSize = 0;
-	uint32_t * ledData;
+	uint32_t* ledData;
 	uint64_t timeDelayStartOne;
-	double frequencyMillis = (pow(10, -6) * (1 / FPS));
+	double frequencyMicros = (pow(10, -6) * (1 / FPS));
 
 	free(ledData); //Ensure the memory used by the previous section is avaiable for new writes
 
 	//Prompt serial monitor for file dir and name
-	String fileName = Serial.readString();
+	Serial.printf("Please enter the directory and file name:\n");
+	if (Serial.available()) {
+		curBitmap.fileName = Serial.readString();
+	}
 
 	//Open file
-	File file = SD.open(fileName);
+	File file = SD.open(curBitmap.fileName);
 	if (!file) {
 		Serial.println("Failed to open file for reading");
 		return;
@@ -174,8 +229,8 @@ void loop() {
 			}
 
 			//Fill time to ensure FPS is acheived
-			if ((micros() - timeDelayStartOne) < frequencyMillis) {
-				delayMicroseconds(frequencyMillis - (micros() - timeDelayStartOne));
+			if ((micros() - timeDelayStartOne) < frequencyMicros) {
+				delayMicroseconds(frequencyMicros - (micros() - timeDelayStartOne));
 				Serial.printf("Time worked out!");
 			}
 
@@ -201,8 +256,8 @@ void loop() {
 				FastLED.show();
 			}
 			//Fill time to ensure FPS is acheived
-			if ((micros() - timeDelayStartOne) < frequencyMillis) {
-				delay(frequencyMillis - (micros() - timeDelayStartOne));
+			if ((micros() - timeDelayStartOne) < frequencyMicros) {
+				delay(frequencyMicros - (micros() - timeDelayStartOne));
 				Serial.printf("Time worked out!");
 			}
 		}
