@@ -11,9 +11,8 @@
 #define NUM_LEDS 80
 #define DATA_PIN 2
 #define FPS 80
+double FRQUENCY_MICROS = (pow(10, 6) * (1 / FPS));
 CRGB leds[NUM_LEDS];
-
-
 
 /*Function to search through directories, not used just yet
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
@@ -63,9 +62,11 @@ uint32_t endianSwap(File file, uint8_t numBytes) {
 	return out;
 }
 
+//Class for bitmap files
 class GenericBitmap {
 	
 	public:
+		//Variables for file information
 		String fileName = "/";
 		File file;
 		int8_t extension = 0;
@@ -78,18 +79,25 @@ class GenericBitmap {
 		uint32_t colorDepth = 0;
 		uint32_t rawImageSize = 0;
 
-		File openFile(String fileName) {
-			File file = SD.open(fileName);
+		//Fuction to open the file
+		void openFile() {
+			file = SD.open(fileName);
 			if (!file) {
-				printf("File could not be opened");
-				return 0;
+				Serial.printf("File could not be opened\n");
+				return;
 			}
 			else {
-				return file;
+				return;
 			}
 		}
 
-		void grabInfo(File file) {
+		void closeFile() {
+			file.close();
+			Serial.printf("File closed");
+		}
+
+		//Grabs all infor from files headers
+		void init() {
 			//4 byte temp data buffer
 			uint8_t* tempData[4];
 			//Ensure we're at the top of the file
@@ -102,7 +110,7 @@ class GenericBitmap {
 				file.seek(0xA);
 				startOfPixels = endianSwap(file, 4);
 				//Size of DIB header
-				sizeOfDIB = endianSwap(file, 4); //Will breakout here to account for all sizes of BMP DIBs
+				sizeOfDIB = endianSwap(file, 4); //Will breakout here to account for all sizes of BMP DIBs (Currently only 24 bpp supported)
 
 				//Dimensions
 				width = endianSwap(file, 4);
@@ -120,8 +128,11 @@ class GenericBitmap {
 				//Check how many LEDS 
 				extension = (0 - (0 - (NUM_LEDS / width)));
 			}
-		}
+			file.seek(startOfPixels); //Prepare file to have pixels read
+		}	
 };
+
+
 
 void setup(){
     //LED setup
@@ -139,16 +150,17 @@ void setup(){
 		Serial.println(".");
 		delay(500);
 	}
+
 }
 
 void loop() {
 	//Vars that need initializing each cycle
 	GenericBitmap curBitmap;
+
 	bool contPlayingFile = true;
 	bool firstCycle = true;
 	uint32_t* ledData;
 	uint64_t timeDelayStartOne;
-	double frequencyMicros = (pow(10, -6) * (1 / FPS));
 
 	free(ledData); //Ensure the memory used by the previous section is avaiable for new writes
 
@@ -158,79 +170,49 @@ void loop() {
 		curBitmap.fileName = Serial.readString();
 	}
 
-	//Open file
-	File file = SD.open(curBitmap.fileName);
-	if (!file) {
-		Serial.println("Failed to open file for reading");
-		return;
-	}
-
 	while (contPlayingFile) {
 		
 		//Only runs memory allocation and array saving once, will use a different function for every time after
 		if (firstCycle) {
-			//The next chunk of lines are grabbing initial data right from the file instead of saving it at all twice
-			//File size
-			file.seek(0x2);
-			sizeOfFile = endianSwap(file, 4);
-			//Starting pixel location
-			file.seek(0xA);
-			startOfPixels = endianSwap(file, 4);
-			//Size of DIB header
-			sizeOfDIB = endianSwap(file, 4); //Will breakout here to account for all sizes of BMP DIBs
 
-			//Dimensions
-			width = endianSwap(file, 4);
-			height = endianSwap(file, 4);
-			//Color Depth
-			file.seek(file.position() + 0x2);
-			colorDepth = endianSwap(file, 2);
-			//Raw image size with padding
-			file.seek(file.position() + 0x2);
-			rawImageSize = endianSwap(file, 4);
-
-			//Skip to pixel data
-			file.seek(startOfPixels);
-			paddingSize = ((width * 3) % 4);
-			//Check how many LEDS 
-			extension = (0 - (0 - (NUM_LEDS / width)));
+			curBitmap.openFile();
 
 			//Allocate enough memory to store ONLY the bits we need to save time
-			ledData = (uint32_t *)malloc(((sizeOfFile - startOfPixels - (height * paddingSize)) * 4) / 3);
-
+			ledData = (uint32_t *)malloc(((curBitmap.sizeOfFile - curBitmap.startOfPixels 
+											- (curBitmap.height * curBitmap.paddingSize)) * 4) / 3);
 			//Variable to ensure FPS is acheived
 			timeDelayStartOne = micros();
 			//For loop for rows
-			for (int y = 0; y < height; y++) {
+			for (int y = 0; y < curBitmap.height; y++) {
 				//For loop for colums
-				for (int x = 0; x < width; x++) {
+				for (int x = 0; x < curBitmap.width; x++) {
 					//For loop for filling in LEDs if file width is not long enough
-					for (int ext = 0; ext < extension; ext++) {
+					for (int ext = 0; ext < curBitmap.extension; ext++) {
 						//Dont keep writing if all leds have been activated
-						if ((ext * width + x) < NUM_LEDS) break;
+						if ((ext * curBitmap.width + x) < NUM_LEDS) break;
 
 						//Set the color of LEDs to show
-						leds[(width * ext) + x].r = file.read();
-						leds[(width * ext) + x].g = file.read();
-						leds[(width * ext) + x].b = file.read();
+						leds[(curBitmap.width * ext) + x].r = curBitmap.file.read();
+						leds[(curBitmap.width * ext) + x].b = curBitmap.file.read();
+						leds[(curBitmap.width * ext) + x].g = curBitmap.file.read();
 					}
 
 					//Add each of the variables to the heap for later (much more  efficient this way)
-					ledData[(y * width) + (x * 3)] = leds[(y * width) + x];
+					ledData[(y * curBitmap.width) + (x * 3)] = leds[(y * curBitmap.width) + x];
 
 				}
 
 				//Show leds
 				FastLED.show();
 				//Skip padding
-				file.seek(file.position() + paddingSize);
+				curBitmap.file.seek(curBitmap.file.position() + curBitmap.paddingSize);
 				//Break if end of file
-				if (!file.available()) break;
+				if (!curBitmap.file.available()) break;
 			}
 
 			//Fill time to ensure FPS is acheived
-			if ((micros() - timeDelayStartOne) < frequencyMicros) {
-				delayMicroseconds(frequencyMicros - (micros() - timeDelayStartOne));
+			if ((micros() - timeDelayStartOne) < FRQUENCY_MICROS) {
+				delayMicroseconds(FRQUENCY_MICROS - (micros() - timeDelayStartOne));
 				Serial.printf("Time worked out!");
 			}
 
@@ -240,24 +222,24 @@ void loop() {
 		else if (!firstCycle) {
 			timeDelayStartOne = micros();
 			//For loop for rows
-			for (int y = 0; y < height; y++) {
+			for (int y = 0; y < curBitmap.height; y++) {
 				//For loop for columns
-				for (int x = 0; x < width; x++) {
+				for (int x = 0; x < curBitmap.width; x++) {
 					//For loop for filling in LEDs if file width is not long enough
-					for (int ext = 0; ext < extension; ext++) {
+					for (int ext = 0; ext < curBitmap.extension; ext++) {
 						//Dont keep writing if all leds have been activated
-						if ((ext * width + x) < NUM_LEDS) break;
+						if ((ext * curBitmap.width + x) < NUM_LEDS) break;
 
 						//Set the color of LEDs to show
-						leds[(width * ext) + x] = ledData[(y * width) + x];
+						leds[(curBitmap.width * ext) + x] = ledData[(y * curBitmap.width) + x];
 					}
 				}
 				//Show leds
 				FastLED.show();
 			}
 			//Fill time to ensure FPS is acheived
-			if ((micros() - timeDelayStartOne) < frequencyMicros) {
-				delay(frequencyMicros - (micros() - timeDelayStartOne));
+			if ((micros() - timeDelayStartOne) < FRQUENCY_MICROS) {
+				delay(FRQUENCY_MICROS - (micros() - timeDelayStartOne));
 				Serial.printf("Time worked out!");
 			}
 		}
