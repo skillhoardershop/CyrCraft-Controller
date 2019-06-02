@@ -61,6 +61,7 @@ uint32_t endianSwap(File file, uint8_t numBytes) {
 	}
 
 	return out;
+}
 
 void setup(){
     //LED setup
@@ -78,8 +79,6 @@ void setup(){
 		Serial.println(".");
 		delay(500);
 	}
-}
-
 }
 
 void loop() {

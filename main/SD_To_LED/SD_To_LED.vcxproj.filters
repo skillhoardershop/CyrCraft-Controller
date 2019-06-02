@@ -15,11 +15,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="SD_To_LED.ino" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="__vm\.SD_To_LED.vsarduino.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="main\SD_To_LED\SD_To_LED.ino" />
   </ItemGroup>
 </Project>
