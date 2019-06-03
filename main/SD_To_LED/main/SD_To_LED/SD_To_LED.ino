@@ -67,8 +67,8 @@ uint32_t endianSwap(File file, uint8_t numBytes) {
 //Class for bitmap files
 class GenericBitmap {
 
-public:
-	String fileName;
+private:
+	//Vars for each bmp file
 	File file;
 	int8_t extension;
 	uint8_t paddingSize;
@@ -76,8 +76,12 @@ public:
 	uint32_t height, colorDepth, rawImageSize;
 	uint32_t* ledData;
 
+
+public:
+	String fileName;
+
 	GenericBitmap() {
-		//Variables for file information
+		//Variables init (We dont want garbage data)
 		int8_t extension = 0;
 		uint8_t paddingSize = 0;
 		uint32_t sizeOfFile = 0;
@@ -90,6 +94,11 @@ public:
 		free(ledData);
 	}
 
+	~GenericBitmap() {
+		file.close();
+		free(ledData);
+	}
+
 	//Method to open the file
 	void openFile() {
 		file = SD.open(fileName);
@@ -97,13 +106,12 @@ public:
 			Serial.printf("File could not be opened\n");
 			return;
 		}
-		else {
-			return;
-		}
+		return;
 	}
 
 	//Grabs all info from headers
 	void init() {
+
 		//4 byte temp data buffer
 		uint8_t* tempData[4];
 		//Ensure we're at the top of the file
@@ -140,7 +148,7 @@ public:
 		file.seek(startOfPixels); 
 	}	
 
-	void playAndCpy() {
+	void playAndStore() {
 		for (int y = 0; y < height; y++) {
 			//For loop for colums
 			for (int x = 0; x < width; x++) {
@@ -189,6 +197,18 @@ public:
 		}
 	}
 
+	void store() {
+		//For loo[s for rows
+		for (int y = 0; y < height; y++) {
+			//For loop for colums
+			for (int x = 0; x < width; x++) {
+				//Store data
+				ledData[(y * width) + (x * 3)] = leds[(y * width) + x];
+			}
+			//Break if end of file
+			if (!file.available()) break;
+		}
+	}
 };
 
 
@@ -238,7 +258,7 @@ void loop() {
 			timeDelayStartOne = micros();
 			
 			//Call the save to array and play method in bitmap class
-			curBitmap.playAndCpy();
+			curBitmap.playAndStore();
 			
 
 			//Fill time to ensure FPS is acheived
