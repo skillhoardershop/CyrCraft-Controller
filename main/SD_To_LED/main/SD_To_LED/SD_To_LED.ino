@@ -91,7 +91,7 @@ public:
 		uint32_t height = 0;
 		uint32_t colorDepth = 0;
 		uint32_t rawImageSize = 0;
-		free(ledData);
+		ledData = 0;
 	}
 
 	~GenericBitmap() {
@@ -120,9 +120,11 @@ public:
 		if ((file.read() == 0x42) && (file.read() == 0x4D)) {	//File is bmp with file type 0x4D42
 			//File size
 			sizeOfFile = endianSwap(file, 4);
+			printf("Size of File: %d,%x", sizeOfFile, sizeOfFile);
 			//Starting pixel location
 			file.seek(0xA);
-			startOfPixels = endianSwap(file, 4);
+			file.read(&startOfPixels, sizeof(startOfPixels));
+			printf("Start of pixels: %X\n", startOfPixels)
 			//Size of DIB header
 			sizeOfDIB = endianSwap(file, 4); //Will breakout here to account for all sizes of BMP DIBs (Currently only 24 bpp supported)
 
@@ -198,7 +200,7 @@ public:
 	}
 
 	void store() {
-		//For loo[s for rows
+		//For loop for rows
 		for (int y = 0; y < height; y++) {
 			//For loop for colums
 			for (int x = 0; x < width; x++) {
